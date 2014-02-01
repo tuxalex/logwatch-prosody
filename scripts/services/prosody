@@ -1,0 +1,78 @@
+#!/usr/bin/perl
+my $Debug = $ENV{'PROSODY_DEBUG'} || 0;
+my $Detail = $ENV{'prosody_detail'} || $ENV{'PROSODY_DETAIL_LEVEL'} || 0;
+my $IgnoreHost = $ENV{'prosody_ignore_host'} || "";
+
+if ( $Debug >= 5 ) {
+    print STDERR "\n\nDEBUG \n\n";
+}
+
+while (defined($ThisLine = <STDIN>)) {
+  # remove timestamp.  We can't use *RemoveHeaders because we need the
+  # service name
+  # $ThisLine =~ s/^\w{3} .\d \d\d:\d\d:\d\d (?:[^\s:]* |)//;
+  $ThisLine =~ s/^\w{3} .\d \d\d:\d\d:\d\d //;
+  if ( $ThisLine =~ /Re-opening log files/ or
+       $ThisLine =~ /^jabber.enbewe.de:saslauth/ or
+       $ThisLine =~ /^c2s.*?Client connected/ or
+       $ThisLine =~ /mod_posix.*?Received SIGHUP/ or
+       $ThisLine =~ /general.*?Reloading configuration file/ or
+       $ThisLine =~ /c2s.*?Client disconnected/ or
+       $ThisLine =~ /^s2sin.*?incoming s2s stream (.*?)->jabber.enbewe.de closed/ or
+       $ThisLine =~ /sent dialback key on outgoing s2s stream/ or
+       $ThisLine =~ /s2sout.*?outgoing s2s stream jabber.enbewe.de->(.*?) closed/ ) {
+    # We don't care about these
+  } elsif ( $ThisLine =~ /^s2sin.*?incoming s2s connection ([^\s]*?)->jabber.enbewe.de complete/ ) {
+    # Count incoming connections
+    $IncComplete{$1}++;
+  } elsif ( $ThisLine =~ /^s2sout.*?Beginning new connection attempt to ([^\s]*?)/ ) {
+    # Outgoing attempts
+    $OutAttempt{$1}++;
+  } elsif ( $ThisLine =~ /^s2sout.*?outgoing s2s connection jabber.enbewe.de->([^\s]*?) complete/ ) {
+    # Outgoing complete
+    $OutComplete{$1}++;
+  } elsif ( $ThisLine =~ /c2s.*?Authenticated as ([^\s]*?)$/ ) {
+    # Connected users
+    $Authenticated{$1}++;
+  } else {
+    # Report any unmatched entries...
+    chomp($ThisLine);
+    $OtherList{$ThisLine}++;
+  }
+}
+
+################################################
+
+if ( ( keys %IncComplete ) or ( keys %OutComplete ) ) {
+  print	"\nS2S Connections:".
+        "\n====================================".
+        "\n Incoming:";
+
+  foreach $Host ( sort keys %IncComplete ) {
+    print "\n  $Host: $IncComplete{$Host}";
+  }
+
+  print "\n\n Outgoing:";
+
+  foreach $Host ( sort keys %OutComplete ) {
+    print "\n  $Host: $OutComplete{$Host}";
+  }
+}
+
+if ( keys %Authenticated ) {
+  print	"\n\nUser logins:".
+        "\n====================================";
+
+  foreach $User ( sort {$a cmp $b} keys %Authenticated ) {
+    print "\n  $User: $Authenticated{$User}";
+  }
+}
+
+if (keys %OtherList) {
+   print "\n\n**Unmatched Entries**\n";
+   foreach $line (sort {$a cmp $b} keys %OtherList) {
+      print "   $line: $OtherList{$line} Time(s)\n";
+   }
+}
+
+exit(0);
